@@ -47,7 +47,7 @@ def extract_content():
         for page in doc:
             content += page.get_text()
         content = remove_non_ascii(content)
-        open('pdf.txt', "w").write(content)
+        # open('pdf.txt', "w").write(content)
 
 
         # Save content to MongoDB
@@ -72,7 +72,6 @@ def ask_question():
     
     object_id = ObjectId(_id)
     context = collection.find_one(object_id)["content"]
-    # context = "Abu Bakar: linkedin.com/abubakar-umer-here/"
     response = chatGPT(context, question)
     doc = {"user_message": question, "assistant_message": response.choices[0].message["content"], "docId": object_id}
     res = collection2.insert_one(doc)
@@ -106,7 +105,6 @@ def chatGPT(context, question, temperature=1):
     return response
   
   except Exception as e:
-    print(e)
     return f"error: {e}"
 
 # def extract_text_from_pdf(pdf_path):
@@ -127,3 +125,7 @@ def chatGPT(context, question, temperature=1):
 
 if __name__ == "__main__":
     app.run()
+
+
+
+# add error handling for chatgpt
