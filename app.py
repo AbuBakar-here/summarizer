@@ -1,10 +1,9 @@
 from flask import Flask, render_template, request
 from werkzeug.utils import secure_filename
-import os, string, fitz
+import os, string, fitz, openai, Keys
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from datetime import datetime
-import openai
 
 
 app = Flask(__name__, static_url_path='/static', static_folder='./static')
@@ -91,7 +90,7 @@ def remove_non_ascii(a_str):
     )
 
 def chatGPT(context, question, temperature=1):
-  openai.api_key = "You api key here"
+  openai.api_key = Keys.OPENAI_API_KEY
   messages = [
     {"role": "system", "content": f"read below text, I will ask you questions from this:\n{context}"},
     {"role": "user", "content": question}
