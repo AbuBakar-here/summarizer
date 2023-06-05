@@ -4,9 +4,12 @@ import os, string, fitz, openai
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from datetime import datetime
+from flask_cors import CORS, cross_origin
 
 
 app = Flask(__name__, static_url_path='/static', static_folder='./static')
+cors = CORS(app)
+app.config['CORS_HEADERS'] = 'Content-Type'
 UPLOAD_FOLDER = 'pdfs-to-test'
 ALLOWED_EXTENSIONS = {'txt', 'pdf'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -25,6 +28,7 @@ def file_upload():
 
 
 @app.route('/extract-content', methods=['POST'])
+@cross_origin()
 def extract_content():
 
     if 'file' not in request.files:
@@ -56,11 +60,12 @@ def extract_content():
 
         return {"_id": str(res.inserted_id), "success": True, "error": False, "message": "contents of the file have been extracted."}
     
-    return {"success": False, "error": True, "message": "redirected"}
+    return {"success": False, "error": True, "message": "either file is not pdf or file is not present"}
 
 
 # create a function to fetch pdf data from database and feed it to chatgpt
 @app.route('/ask-question', methods=['POST'])
+@cross_origin()
 def ask_question():
     _id = request.form['_id']
     print(_id)
