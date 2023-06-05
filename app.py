@@ -92,7 +92,7 @@ def remove_non_ascii(a_str):
     )
 
 def chatGPT(context, question, temperature=1):
-  openai.api_key = os['OPENAI_API_KEY']
+  openai.api_key = os.environ.get("OPENAI_API_KEY")
   messages = [
     {"role": "system", "content": f"read below text, I will ask you questions from this:\n{context}"},
     {"role": "user", "content": question}
