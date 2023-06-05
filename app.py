@@ -43,6 +43,7 @@ def extract_content():
 
         doc = fitz.open(complete_file_path)
         content = ""
+        print(len(doc))
         for page in doc:
             content += page.get_text()
         content = remove_non_ascii(content)
