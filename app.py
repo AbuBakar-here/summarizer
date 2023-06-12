@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request
 from werkzeug.utils import secure_filename
-import os, string, fitz, openai, tiktoken#, Keys
+import os, string, openai
+# import fitz, tiktoken, Keys
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from datetime import datetime
