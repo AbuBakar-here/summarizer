@@ -1,10 +1,29 @@
 from flask import Flask, render_template, request
 from werkzeug.utils import secure_filename
-import os, string, fitz, openai
+import os, string, fitz, openai, tiktoken#, Keys
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from datetime import datetime
 from flask_cors import CORS, cross_origin
+
+
+########### remove below text #######################
+
+from transformers import GPT2TokenizerFast
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import FAISS
+import textract
+
+
+tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
+
+def count_tokens(text: str) -> int:
+    return len(tokenizer.encode(text))
+
+dbs = {}
+
+####################################################
 
 
 app = Flask(__name__, static_url_path='/static', static_folder='./static')
@@ -13,6 +32,7 @@ app.config['CORS_HEADERS'] = 'Content-Type'
 UPLOAD_FOLDER = 'pdfs-to-test'
 ALLOWED_EXTENSIONS = {'txt', 'pdf'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
 
 # MongoDB configuration
 db_user_name = "PythonPDF"
@@ -45,30 +65,89 @@ def extract_content():
         complete_file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(complete_file_path)
 
-        doc = fitz.open(complete_file_path)
-        content = ""
-        print(len(doc))
-        for page in doc:
-            content += page.get_text()
-        content = remove_non_ascii(content)
-        # open('pdf.txt', "w").write(content)
+        # doc = fitz.open(complete_file_path)
+        # content = ""
+        # print(len(doc))
+        # for page in doc:
+        #     content += page.get_text()
+        # content = remove_non_ascii(content)
 
+        # converting pdf's text to tokens
+        # enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+        # len_of_tokens = len(enc.encode(content))
+
+        # if len_of_tokens > 4000:
+        #     return {"success": False, "message": "Token limit exceed!"}
+
+
+        ################### remove below code #################
+        
+        doc = textract.process(complete_file_path)
+        with open('./pdfs-to-test/abc.txt', 'w') as f:
+            f.write(doc.decode('utf-8'))
+
+        with open('./pdfs-to-test/abc.txt', 'r') as f:
+            content = f.read().replace("\n\n", "\n")
+
+        text_splitter = RecursiveCharacterTextSplitter(
+            # Set a really small chunk size, just to show.
+            chunk_size = 100,
+            chunk_overlap  = 24,
+            length_function = count_tokens
+        )
+
+        chunks = text_splitter.create_documents([content])
+        # Get embedding model
+        embeddings = OpenAIEmbeddings(openai_api_key = OPENAI_KEY)
+
+        # Create vector database
+        db = FAISS.from_documents(chunks, embeddings)
+
+
+        ########################################################
 
         # Save content to MongoDB
         doc = {"filename": filename, "type": filename.split('.')[-1], "content": content}
         res = collection.insert_one(doc)
+        
+        #### delete below line
+        dbs[str(res.inserted_id)] = db
 
         return {"_id": str(res.inserted_id), "success": True, "error": False, "message": "contents of the file have been extracted."}
     
     return {"success": False, "error": True, "message": "either file is not pdf or file is not present"}
 
 
-# create a function to fetch pdf data from database and feed it to chatgpt
+# # create a function to fetch pdf data from database and feed it to chatgpt
+# @app.route('/ask-question', methods=['POST'])
+# @cross_origin()
+# def ask_question():
+#     _id = request.form['_id']
+#     question = request.form['question']
+
+#     if not _id:
+#         return {"success": False, "error": True, "message": "_id of the content is required"}
+#     elif not question:
+#         return {"success": False, "error": True, "message": "Question is required"}
+    
+#     object_id = ObjectId(_id)
+#     context = collection.find_one(object_id)["content"]
+#     response = chatGPT(context, question)
+
+#     if response["success"] != True:
+#         print(response)
+#         return response
+
+#     doc = {"user_message": question, "assistant_message": response.choices[0].message["content"], "docId": object_id}
+#     res = collection2.insert_one(doc)
+#     return response
+
+################### remove below code ########################
+
 @app.route('/ask-question', methods=['POST'])
 @cross_origin()
 def ask_question():
     _id = request.form['_id']
-    print(_id)
     question = request.form['question']
 
     if not _id:
@@ -76,12 +155,28 @@ def ask_question():
     elif not question:
         return {"success": False, "error": True, "message": "Question is required"}
     
-    object_id = ObjectId(_id)
-    context = collection.find_one(object_id)["content"]
-    response = chatGPT(context, question)
-    doc = {"user_message": question, "assistant_message": response.choices[0].message["content"], "docId": object_id}
-    res = collection2.insert_one(doc)
+    
+    docs = dbs[_id].similarity_search(question)
+    text = docs_to_text(docs)
+    chat_history = get_chat_history(_id)
+    response = chatPDF(question, text, chat_history)
+
+    if response["success"] != True:
+        print(response)
+        return response
+
+    # append new messages
+    chat_history.append({"role": "user", "content": question})
+    chat_history.append({"role": "assistant", "content": response["response"].choices[0].message["content"]})
+    
+    doc = {"chatHistory": chat_history, "docId": ObjectId(_id)}
+    
+    update_chat_history(_id, doc)
+    
     return response
+
+##################################################################################
+
 
 # utility functions
 def allowed_file(filename):
@@ -97,7 +192,7 @@ def remove_non_ascii(a_str):
     )
 
 def chatGPT(context, question, temperature=1):
-  openai.api_key = os.environ.get("OPENAI_API_KEY")
+  openai.api_key = OPENAI_KEY
   messages = [
     {"role": "system", "content": f"read below text, I will ask you questions from this:\n{context}"},
     {"role": "user", "content": question}
@@ -108,26 +203,55 @@ def chatGPT(context, question, temperature=1):
         messages=messages,
         temperature=temperature,
     )
-    return response
+
+    return { "success": True, "response": response }
   
   except Exception as e:
-    return f"error: {e}"
+    print(f"error: {e}")
+    return {"success": False, "message": str(e)}
 
-# def extract_text_from_pdf(pdf_path):
-#     pdf_reader = PyPDF2.PdfReader(open(pdf_path, "rb")).pages
-#     len_of_pdf = len(pdf_reader)
 
-#     # if pdf file have more than 200 pages use PyPDF2 else use pdfminer
-#     if len_of_pdf > 200:
-#         text = ""
-#         for page_num in range(len_of_pdf):
-#             page = pdf_reader[page_num]
-#             text += page.extract_text()
-#         return text
+########################### remove below code ##############################
 
-#     return pdf2txt.main(pdf_path).data
+def chatPDF(prompt, assistant, history=None):
+  openai.api_key = OPENAI_KEY
+  messages = [ 
+      {"role": "system", "content": f"You need to answer my questions from below text. Try to answer me in a most descriptive way.\nText:\n{assistant}"}
+      ]
+  if len(history) > 0:
+    messages.extend(history)
+    print(messages[1:])
 
-    
+  messages.append({"role": "user", "content": f"{prompt}. Make this as descirptive as possible"})
+  try:
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=messages,
+        temperature=1,
+    )
+    return { "success": True, "response": response }
+  except Exception as e:
+    print(f"error: {e}")
+    return {"success": False, "message": str(e)}
+
+def docs_to_text(docs):
+  text = ""
+  for i in docs:
+    text += i.page_content.replace("\n\n", "\n")
+  
+  return text
+
+def get_chat_history(_id):
+    chat_history = collection2.find_one( { "docId": ObjectId(_id) } )
+    if chat_history:
+        return chat_history["chatHistory"]
+    return []
+
+def update_chat_history(_id, updated_doc):
+    response = collection2.update_one( { "docId": ObjectId(_id) }, {"$set": updated_doc}, upsert=True )
+
+#########################################################################    
+
 
 if __name__ == "__main__":
     app.run()
