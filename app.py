@@ -14,13 +14,35 @@ from transformers import GPT2TokenizerFast
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
-import textract
+from langchain.document_loaders import (
+    CSVLoader,
+    EverNoteLoader,
+    PyMuPDFLoader,
+    TextLoader,
+    UnstructuredEmailLoader,
+    UnstructuredEPubLoader,
+    UnstructuredHTMLLoader,
+    UnstructuredMarkdownLoader,
+    UnstructuredPowerPointLoader,
+    UnstructuredWordDocumentLoader,
+)
 
 
 tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
 
-def count_tokens(text: str) -> int:
-    return len(tokenizer.encode(text))
+LOADER_MAPPING = {
+    ".csv": (CSVLoader, {}),
+    ".doc": (UnstructuredWordDocumentLoader, {}),
+    ".docx": (UnstructuredWordDocumentLoader, {}),
+    ".enex": (EverNoteLoader, {}),
+    ".epub": (UnstructuredEPubLoader, {}),
+    ".html": (UnstructuredHTMLLoader, {}),
+    ".md": (UnstructuredMarkdownLoader, {}),
+    ".pdf": (PyMuPDFLoader, {}),
+    ".ppt": (UnstructuredPowerPointLoader, {}),
+    ".pptx": (UnstructuredPowerPointLoader, {}),
+    ".txt": (TextLoader, {"encoding": "utf8"}),
+}
 
 dbs = {}
 
@@ -31,7 +53,7 @@ app = Flask(__name__, static_url_path='/static', static_folder='./static')
 cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
 UPLOAD_FOLDER = 'pdfs-to-test'
-ALLOWED_EXTENSIONS = {'txt', 'pdf'}
+ALLOWED_EXTENSIONS = {'txt', 'doc', 'docx', 'enex', 'epub', 'html', 'md', 'pdf', 'ppt', 'pptx', 'csv'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
 
@@ -83,21 +105,28 @@ def extract_content():
 
         ################### remove below code #################
         
-        doc = textract.process(complete_file_path)
-        with open('./pdfs-to-test/abc.txt', 'w') as f:
-            f.write(doc.decode('utf-8'))
+        # doc = textract.process(complete_file_path)
+        # with open('./pdfs-to-test/abc.txt', 'w') as f:
+        #     f.write(doc.decode('utf-8'))
 
-        with open('./pdfs-to-test/abc.txt', 'r') as f:
-            content = f.read().replace("\n\n", "\n")
+        # with open('./pdfs-to-test/abc.txt', 'r') as f:
+        #     content = f.read().replace("\n\n", "\n")
 
-        text_splitter = RecursiveCharacterTextSplitter(
-            # Set a really small chunk size, just to show.
-            chunk_size = 100,
-            chunk_overlap  = 24,
-            length_function = count_tokens
-        )
+        # text_splitter = RecursiveCharacterTextSplitter(
+        #     # Set a really small chunk size, just to show.
+        #     chunk_size = 100,
+        #     chunk_overlap  = 24,
+        #     length_function = count_tokens
+        # )
 
-        chunks = text_splitter.create_documents([content])
+        # chunks = text_splitter.create_documents([content])
+        
+        chunks = process_documents(complete_file_path)
+        
+        if not chunks["success"]:
+            return {"success": False, "error": True, "message": "either file is not pdf or file is not present"}
+        chunks = chunks["chunks"]
+        
         # Get embedding model
         embeddings = OpenAIEmbeddings(openai_api_key = OPENAI_KEY)
 
@@ -108,7 +137,7 @@ def extract_content():
         ########################################################
 
         # Save content to MongoDB
-        doc = {"filename": filename, "type": filename.split('.')[-1], "content": content}
+        doc = {"filename": filename, "type": filename.split('.')[-1], "content": docs_to_text(chunks)}
         res = collection.insert_one(doc)
         
         #### delete below line
@@ -250,6 +279,30 @@ def get_chat_history(_id):
 
 def update_chat_history(_id, updated_doc):
     response = collection2.update_one( { "docId": ObjectId(_id) }, {"$set": updated_doc}, upsert=True )
+    
+def count_tokens(text: str) -> int:
+    return len(tokenizer.encode(text))    
+
+def load_single_document(file_path: str) -> list:
+    ext = "." + file_path.rsplit(".", 1)[-1]
+    if ext in LOADER_MAPPING:
+        loader_class, loader_args = LOADER_MAPPING[ext]
+        loader = loader_class(file_path, **loader_args)
+        return loader.load()
+
+    return []
+
+def process_documents(file_path: str) -> dict:
+    """
+    Load documents and split in chunks
+    """
+    documents = load_single_document(file_path)
+    if not len(documents) < 1:
+        {"success": False, "chunks": []}
+
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=100, chunk_overlap=24, length_function = count_tokens)
+    chunks = text_splitter.split_documents(documents)
+    return {"success": True, "chunks": chunks}
 
 #########################################################################    
 
