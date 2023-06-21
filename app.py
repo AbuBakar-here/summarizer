@@ -14,6 +14,7 @@ from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
 
 
 # embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L12-v1")
+OPENAI_KEY = os.environ.get("OPENAI_API_KEY") or Keys.OPENAI_API_KEY
 embeddings = OpenAIEmbeddings(openai_api_key = OPENAI_KEY)
 
 dbs = {}
