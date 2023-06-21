@@ -1,48 +1,20 @@
 from flask import Flask, render_template, request
 from werkzeug.utils import secure_filename
-import os, string, openai
+import os
 # import fitz, tiktoken, Keys
 from pymongo import MongoClient
 from bson.objectid import ObjectId
-from datetime import datetime
 from flask_cors import CORS, cross_origin
+from utils.utils import *#allowed_file, chatPDF, docs_to_text, get_chat_history, update_chat_history, count_tokens, load_single_document, process_documents, ExcelLoader
 
 
 ########### remove below text #######################
 
-from transformers import GPT2TokenizerFast
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import FAISS
-from langchain.document_loaders import (
-    CSVLoader,
-    EverNoteLoader,
-    PyMuPDFLoader,
-    TextLoader,
-    UnstructuredEmailLoader,
-    UnstructuredEPubLoader,
-    UnstructuredHTMLLoader,
-    UnstructuredMarkdownLoader,
-    UnstructuredPowerPointLoader,
-    UnstructuredWordDocumentLoader,
-)
+from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
 
 
-tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
-
-LOADER_MAPPING = {
-    ".csv": (CSVLoader, {}),
-    ".doc": (UnstructuredWordDocumentLoader, {}),
-    ".docx": (UnstructuredWordDocumentLoader, {}),
-    ".enex": (EverNoteLoader, {}),
-    ".epub": (UnstructuredEPubLoader, {}),
-    ".html": (UnstructuredHTMLLoader, {}),
-    ".md": (UnstructuredMarkdownLoader, {}),
-    ".pdf": (PyMuPDFLoader, {}),
-    ".ppt": (UnstructuredPowerPointLoader, {}),
-    ".pptx": (UnstructuredPowerPointLoader, {}),
-    ".txt": (TextLoader, {"encoding": "utf8"}),
-}
+embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L12-v1")
+# embeddings = OpenAIEmbeddings(openai_api_key = OPENAI_KEY)
 
 dbs = {}
 
@@ -53,9 +25,8 @@ app = Flask(__name__, static_url_path='/static', static_folder='./static')
 cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
 UPLOAD_FOLDER = 'pdfs-to-test'
-ALLOWED_EXTENSIONS = {'txt', 'doc', 'docx', 'enex', 'epub', 'html', 'md', 'pdf', 'ppt', 'pptx', 'csv'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
+
 
 # MongoDB configuration
 db_user_name = "PythonPDF"
@@ -88,20 +59,6 @@ def extract_content():
         complete_file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(complete_file_path)
 
-        # doc = fitz.open(complete_file_path)
-        # content = ""
-        # print(len(doc))
-        # for page in doc:
-        #     content += page.get_text()
-        # content = remove_non_ascii(content)
-
-        # converting pdf's text to tokens
-        # enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
-        # len_of_tokens = len(enc.encode(content))
-
-        # if len_of_tokens > 4000:
-        #     return {"success": False, "message": "Token limit exceed!"}
-
 
         ################### remove below code #################
         
@@ -126,9 +83,6 @@ def extract_content():
         if not chunks["success"]:
             return {"success": False, "error": True, "message": "either file is not pdf or file is not present"}
         chunks = chunks["chunks"]
-        
-        # Get embedding model
-        embeddings = OpenAIEmbeddings(openai_api_key = OPENAI_KEY)
 
         # Create vector database
         db = FAISS.from_documents(chunks, embeddings)
@@ -145,34 +99,8 @@ def extract_content():
 
         return {"_id": str(res.inserted_id), "success": True, "error": False, "message": "contents of the file have been extracted."}
     
-    return {"success": False, "error": True, "message": "either file is not pdf or file is not present"}
+    return {"success": False, "error": True, "message": "We do not support this format yet."}
 
-
-# # create a function to fetch pdf data from database and feed it to chatgpt
-# @app.route('/ask-question', methods=['POST'])
-# @cross_origin()
-# def ask_question():
-#     _id = request.form['_id']
-#     question = request.form['question']
-
-#     if not _id:
-#         return {"success": False, "error": True, "message": "_id of the content is required"}
-#     elif not question:
-#         return {"success": False, "error": True, "message": "Question is required"}
-    
-#     object_id = ObjectId(_id)
-#     context = collection.find_one(object_id)["content"]
-#     response = chatGPT(context, question)
-
-#     if response["success"] != True:
-#         print(response)
-#         return response
-
-#     doc = {"user_message": question, "assistant_message": response.choices[0].message["content"], "docId": object_id}
-#     res = collection2.insert_one(doc)
-#     return response
-
-################### remove below code ########################
 
 @app.route('/ask-question', methods=['POST'])
 @cross_origin()
@@ -207,70 +135,6 @@ def ask_question():
 
 ##################################################################################
 
-
-# utility functions
-def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-def remove_non_ascii(a_str):
-    a_str = a_str.replace("\n\n", "\n")
-    ascii_chars = set(string.printable)
-
-    return ''.join(
-        filter(lambda x: x in ascii_chars, a_str)
-    )
-
-def chatGPT(context, question, temperature=1):
-  openai.api_key = OPENAI_KEY
-  messages = [
-    {"role": "system", "content": f"read below text, I will ask you questions from this:\n{context}"},
-    {"role": "user", "content": question}
-  ]
-  try:
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=messages,
-        temperature=temperature,
-    )
-
-    return { "success": True, "response": response }
-  
-  except Exception as e:
-    print(f"error: {e}")
-    return {"success": False, "message": str(e)}
-
-
-########################### remove below code ##############################
-
-def chatPDF(prompt, assistant, history=None):
-  openai.api_key = OPENAI_KEY
-  messages = [ 
-      {"role": "system", "content": f"You need to answer my questions from below text. Try to answer me in a most descriptive way.\nText:\n{assistant}"}
-      ]
-  if len(history) > 0:
-    messages.extend(history)
-    print(messages[1:])
-
-  messages.append({"role": "user", "content": f"{prompt}. Make this as descirptive as possible"})
-  try:
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=messages,
-        temperature=1,
-    )
-    return { "success": True, "response": response }
-  except Exception as e:
-    print(f"error: {e}")
-    return {"success": False, "message": str(e)}
-
-def docs_to_text(docs):
-  text = ""
-  for i in docs:
-    text += i.page_content.replace("\n\n", "\n")
-  
-  return text
-
 def get_chat_history(_id):
     chat_history = collection2.find_one( { "docId": ObjectId(_id) } )
     if chat_history:
@@ -279,32 +143,8 @@ def get_chat_history(_id):
 
 def update_chat_history(_id, updated_doc):
     response = collection2.update_one( { "docId": ObjectId(_id) }, {"$set": updated_doc}, upsert=True )
-    
-def count_tokens(text: str) -> int:
-    return len(tokenizer.encode(text))    
 
-def load_single_document(file_path: str) -> list:
-    ext = "." + file_path.rsplit(".", 1)[-1]
-    if ext in LOADER_MAPPING:
-        loader_class, loader_args = LOADER_MAPPING[ext]
-        loader = loader_class(file_path, **loader_args)
-        return loader.load()
-
-    return []
-
-def process_documents(file_path: str) -> dict:
-    """
-    Load documents and split in chunks
-    """
-    documents = load_single_document(file_path)
-    if not len(documents) < 1:
-        {"success": False, "chunks": []}
-
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=100, chunk_overlap=24, length_function = count_tokens)
-    chunks = text_splitter.split_documents(documents)
-    return {"success": True, "chunks": chunks}
-
-#########################################################################    
+##################################################################################
 
 
 if __name__ == "__main__":
