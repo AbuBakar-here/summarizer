@@ -13,8 +13,8 @@ from utils.utils import *#allowed_file, chatPDF, docs_to_text, get_chat_history,
 from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
 
 
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L12-v1")
-# embeddings = OpenAIEmbeddings(openai_api_key = OPENAI_KEY)
+# embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L12-v1")
+embeddings = OpenAIEmbeddings(openai_api_key = OPENAI_KEY)
 
 dbs = {}
 
