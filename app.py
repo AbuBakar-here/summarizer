@@ -5,7 +5,7 @@ import os
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from flask_cors import CORS, cross_origin
-from utils.utils import *#allowed_file, chatPDF, docs_to_text, get_chat_history, update_chat_history, count_tokens, load_single_document, process_documents, ExcelLoader
+from utils.utils import *
 
 
 ########### remove below text #######################
@@ -13,9 +13,9 @@ from utils.utils import *#allowed_file, chatPDF, docs_to_text, get_chat_history,
 from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
 
 
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L12-v1")
+# embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L12-v1")
 OPENAI_KEY = os.environ.get("OPENAI_API_KEY") or Keys.OPENAI_API_KEY
-# embeddings = OpenAIEmbeddings(openai_api_key = OPENAI_KEY)
+embeddings = OpenAIEmbeddings(openai_api_key = OPENAI_KEY)
 
 dbs = {}
 
