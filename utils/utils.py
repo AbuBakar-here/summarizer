@@ -18,7 +18,7 @@ from langchain.document_loaders import (
 )
 
 tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
-OPENAI_KEY = os.environ.get("OPENAI_API_KEY") or Keys.OPENAI_API_KEY
+OPENAI_KEY = os.environ.get("OPENAI_API_KEY")# or Keys.OPENAI_API_KEY
 ALLOWED_EXTENSIONS = {'txt', 'doc', 'docx', 'enex', 'epub', 'html', 'md', 'pdf', 'ppt', 'pptx', 'csv', "xls", "xlsx"}
 
 

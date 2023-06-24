@@ -15,7 +15,7 @@ from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings, Huggin
 # embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L12-v1")
 # OPENAI_KEY = os.environ.get("OPENAI_API_KEY") or Keys.OPENAI_API_KEY
 # embeddings = OpenAIEmbeddings(openai_api_key = OPENAI_KEY)
-HUGGINGFACEHUB_API_TOKEN = os.environ.get("HUGGINGFACEHUB_API_TOKEN") or Keys.HUGGINGFACEHUB_API_TOKEN
+HUGGINGFACEHUB_API_TOKEN = os.environ.get("HUGGINGFACEHUB_API_TOKEN")# or Keys.HUGGINGFACEHUB_API_TOKEN
 embeddings = HuggingFaceHubEmbeddings(repo_id="sentence-transformers/all-MiniLM-L12-v1", huggingfacehub_api_token = HUGGINGFACEHUB_API_TOKEN)
 
 dbs = {}
