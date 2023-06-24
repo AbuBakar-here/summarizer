@@ -1,7 +1,6 @@
 from flask import Flask, render_template, request
 from werkzeug.utils import secure_filename
-import os
-# import fitz, tiktoken, Keys
+import os#, Keys
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from flask_cors import CORS, cross_origin
@@ -10,12 +9,14 @@ from utils.utils import *
 
 ########### remove below text #######################
 
-from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
+from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings, HuggingFaceHubEmbeddings
 
 
 # embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L12-v1")
-OPENAI_KEY = os.environ.get("OPENAI_API_KEY") or Keys.OPENAI_API_KEY
-embeddings = OpenAIEmbeddings(openai_api_key = OPENAI_KEY)
+# OPENAI_KEY = os.environ.get("OPENAI_API_KEY") or Keys.OPENAI_API_KEY
+# embeddings = OpenAIEmbeddings(openai_api_key = OPENAI_KEY)
+HUGGINGFACEHUB_API_TOKEN = os.environ.get("HUGGINGFACEHUB_API_TOKEN") or Keys.HUGGINGFACEHUB_API_TOKEN
+embeddings = HuggingFaceHubEmbeddings(repo_id="sentence-transformers/all-MiniLM-L12-v1", huggingfacehub_api_token = HUGGINGFACEHUB_API_TOKEN)
 
 dbs = {}
 
