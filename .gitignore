@@ -1,5 +1,6 @@
 venv
 __pycache__
 pdfs-to-test/*
+vector-store/*
 Keys.py
 todo.txt

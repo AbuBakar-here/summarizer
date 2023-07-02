@@ -51,23 +51,30 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def chatPDF(prompt, assistant, history=None):
+def chatPDF(prompt, assistant, history=[]):
   openai.api_key = OPENAI_KEY
   messages = [ 
-      {"role": "system", "content": f"You need to answer my questions from below text. Try to answer me in a most descriptive way.\nText:\n{assistant}"}
+      {"role": "system", "content": f"Search the answer of my questions from the 'Text' I am going to provide and answer me. Try to answer me in a most descriptive way.\nText:\n{assistant}"}
       ]
   if len(history) > 0:
     messages.extend(history[-15:])
-    print(messages[1:])
 
   messages.append({"role": "user", "content": f"{prompt}. Make this as descirptive as possible"})
   try:
-    response = openai.ChatCompletion.create(
+    return openai.ChatCompletion.create(
         model="gpt-3.5-turbo-16k",
         messages=messages,
         temperature=1,
+        stream=True
     )
-    return { "success": True, "response": response }
+    
+    # for line in response:
+    #   if 'content' in line['choices'][0]['delta']:
+    #     yield line['choices'][0]['delta']['content']
+        
+    # print(response)
+    # return { "success": True, "response": response }
+
   except Exception as e:
     print(f"error: {e}")
     return {"success": False, "message": str(e)}

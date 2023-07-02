@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <html>
+
 <head>
 	<title>Upload a PDF</title>
 	<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
+
 <body>
 	<div class="container">
 		<h1>Upload a PDF</h1>
@@ -11,22 +13,24 @@
 		<input type="file" id="file" name="file">
 		<div id="content"></div>
 		<button id="extract-btn" style="display:none">Extract Content</button>
-		<button id="extract-btn-2" style="display:none">ChatGPT</button>
+		<input type="text" id="_id">
+		<input type="text" id="question">
+		<button id="extract-btn-2">ChatGPT</button>
 	</div>
 	<script type="text/javascript">
 		const fileInput = document.getElementById("file");
 		const extractBtn = document.getElementById("extract-btn");
 		const contentDiv = document.getElementById("content");
 		const extractBtn2 = document.getElementById("extract-btn-2");
-		
-		fileInput.addEventListener("change", function() {
+
+		fileInput.addEventListener("change", function () {
 			extractBtn.style.display = "block";
 			extractBtn2.style.display = "block";
 		});
-		
-		extractBtn.addEventListener("click", function() {
+
+		extractBtn.addEventListener("click", function () {
 			const xhr = new XMLHttpRequest();
-			xhr.onreadystatechange = function() {
+			xhr.onreadystatechange = function () {
 				if (xhr.readyState === 4 && xhr.status === 200) {
 					contentDiv.innerHTML = xhr.responseText;
 				}
@@ -37,19 +41,33 @@
 			xhr.send(formData);
 		});
 
-		extractBtn2.addEventListener("click", function() {
-			const xhr = new XMLHttpRequest();
-			xhr.onreadystatechange = function() {
-				if (xhr.readyState === 4 && xhr.status === 200) {
-					contentDiv.innerHTML = xhr.responseText;
-				}
-			}
-			xhr.open("POST", "{{ url_for('ask_question') }}", true);
+		extractBtn2.addEventListener("click", async function () {
+
 			const formData = new FormData();
-			formData.append("_id", "647f780ebc10d54e30ebf369");
-			formData.append("question", "give me the key points for this");
-			xhr.send(formData);
+			const _id = document.getElementById("_id").value
+			const question = document.getElementById("question").value
+			formData.append("_id", _id);
+			formData.append("question", question);
+
+			try {
+
+				response = await fetch("{{ url_for('ask_question') }}", { method: 'POST', body: formData })
+
+				const reader = response.body.getReader();
+				contentDiv.innerHTML = ""
+
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					const text = new TextDecoder().decode(value);
+					console.log(text)
+					contentDiv.innerHTML += text;
+				}
+			} catch (error) {
+				console.log(error)
+			}
 		});
 	</script>
 </body>
+
 </html>

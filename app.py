@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, Response
 from werkzeug.utils import secure_filename
 import os#, Keys
 from pymongo import MongoClient
@@ -17,8 +17,8 @@ from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings, Huggin
 # embeddings = OpenAIEmbeddings(openai_api_key = OPENAI_KEY)
 HUGGINGFACEHUB_API_TOKEN = os.environ.get("HUGGINGFACEHUB_API_TOKEN")# or Keys.HUGGINGFACEHUB_API_TOKEN
 embeddings = HuggingFaceHubEmbeddings(repo_id="sentence-transformers/all-MiniLM-L12-v1", huggingfacehub_api_token = HUGGINGFACEHUB_API_TOKEN)
-
-dbs = {}
+os.system("mkdir pdfs-to-test")
+os.system("mkdir vector-store")
 
 ####################################################
 
@@ -27,6 +27,7 @@ app = Flask(__name__, static_url_path='/static', static_folder='./static')
 cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
 UPLOAD_FOLDER = 'pdfs-to-test'
+VECTOR_STORE = 'vector-store'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 
@@ -96,12 +97,34 @@ def extract_content():
         doc = {"filename": filename, "type": filename.split('.')[-1], "content": docs_to_text(chunks)}
         res = collection.insert_one(doc)
         
-        #### delete below line
-        dbs[str(res.inserted_id)] = db
+        # Save vector database
+        db.save_local(os.path.join(VECTOR_STORE, str(res.inserted_id)))
 
         return {"_id": str(res.inserted_id), "success": True, "error": False, "message": "contents of the file have been extracted."}
     
     return {"success": False, "error": True, "message": "We do not support this format yet."}
+
+
+@app.route('/generate-document-info', methods=['POST'])
+@cross_origin()
+def generate_document_info():
+    _id = request.form['_id']
+    if not _id:
+        return {"success": False, "error": True, "message": "_id of the content is required"}
+    
+    question = "determine the topic from provided text then generate a 50-100 words summary of the text and then generate 3 questions from given text related to topic"
+    docs = FAISS.load_local(os.path.join(VECTOR_STORE, _id), embeddings).similarity_search(question)
+    text = docs_to_text(docs)
+    ans = ""
+    try:
+        for line in chatPDF(question, text):
+            if 'content' in line['choices'][0]['delta']:
+                ans += line['choices'][0]['delta']['content']
+        
+        return {"success": True, "error": False, "content": ans}
+    except Exception as e:
+        print(f"error from generate_document_info: {e}")
+        return {"success": False, "error": True, "message": str(e)}
 
 
 @app.route('/ask-question', methods=['POST'])
@@ -116,24 +139,40 @@ def ask_question():
         return {"success": False, "error": True, "message": "Question is required"}
     
     
-    docs = dbs[_id].similarity_search(question)
+    docs = FAISS.load_local(os.path.join(VECTOR_STORE, _id), embeddings).similarity_search(question)
     text = docs_to_text(docs)
     chat_history = get_chat_history(_id)
-    response = chatPDF(question, text, chat_history)
+    # response = chatPDF(question, text, chat_history)
+    
+    def gen():
+        ans = ""
+        for line in chatPDF(question, text, chat_history):
+            if 'content' in line['choices'][0]['delta']:
+                ans += line['choices'][0]['delta']['content']
+                yield line['choices'][0]['delta']['content']
+        
+        chat_history.append({"role": "user", "content": question})
+        chat_history.append({"role": "assistant", "content": ans})
+        
+        doc = {"chatHistory": chat_history, "docId": ObjectId(_id)}
+        
+        update_chat_history(_id, doc)
+    
+    return Response(gen(), mimetype="text/event-stream")
 
-    if response["success"] != True:
-        print(response)
-        return response
+    # if response["success"] != True:
+    #     print(response)
+    #     return response
 
     # append new messages
-    chat_history.append({"role": "user", "content": question})
-    chat_history.append({"role": "assistant", "content": response["response"].choices[0].message["content"]})
+    # chat_history.append({"role": "user", "content": question})
+    # chat_history.append({"role": "assistant", "content": response["response"].choices[0].message["content"]})
     
-    doc = {"chatHistory": chat_history, "docId": ObjectId(_id)}
+    # doc = {"chatHistory": chat_history, "docId": ObjectId(_id)}
     
-    update_chat_history(_id, doc)
+    # update_chat_history(_id, doc)
     
-    return response
+    # return response
 
 ##################################################################################
 
@@ -150,8 +189,4 @@ def update_chat_history(_id, updated_doc):
 
 
 if __name__ == "__main__":
-    app.run()
-
-
-
-# add error handling for chatgpt
+    app.run(thread=True)
